@@ -183,7 +183,7 @@ rideSSH UseTunnel opt = do
     tunDir <- getTunnelDirectory
     files  <- getDirectoryContents tunDir
     let matched = filter (\f -> hasPrefix f && hasSuffix f) files
-    _ <- mapM tryFile $ map (\f -> joinPath [tunDir, f]) matched
+    _ <- mapM (tryFile . (\f -> joinPath [tunDir, f])) matched
     rideSSH IgnoreTunnel opt
   where
     hasPrefix = ((tunnelPrefix opt ++ "__") `isPrefixOf`)
