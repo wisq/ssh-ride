@@ -12,6 +12,8 @@ import System.FilePath
 import Data.List
 import Data.List.Split (splitOn)
 import System.IO
+import Data.ByteString.Lazy.Char8 (pack)
+import Data.Digest.Pure.SHA (sha1, showDigest)
 
 data Options = Options
   { optRawOpts :: [String]
@@ -143,20 +145,22 @@ tunnelMode opt
     | otherwise     = UseTunnel
   where interactive = length (optNonOpts opt) < 2
 
-tunnelPrefix :: Options -> String
-tunnelPrefix opt = intercalate "-" [host, show port, login]
+socketPrefix :: Options -> String
+socketPrefix opt = hash fields
   where
-    host  = head (optNonOpts opt)
-    port  = fromMaybe 22 (optPort opt)
-    login = fromMaybe "none" (optLogin opt)
+    hash   = take 8 . showDigest . sha1 . pack
+    fields = intercalate "-" [host, show port, login]
+    host   = head (optNonOpts opt)
+    port   = fromMaybe 22 (optPort opt)
+    login  = fromMaybe "none" (optLogin opt)
 
-controlSuffix :: FilePath
-controlSuffix = "%h-%p-%r.ctl"
+socketSuffix :: FilePath
+socketSuffix = "%h-%p-%r.ctl"
 
 getTunnelFile :: Options -> IO FilePath
 getTunnelFile opt = do
     time <- getCurrentTime
-    let file = intercalate "__" [tunnelPrefix opt, (show . stamp) time, controlSuffix]
+    let file = intercalate "__" [socketPrefix opt, (show . stamp) time, socketSuffix]
     path <- getTunnelDirectory
     return $ joinPath [path, file]
   where
@@ -186,9 +190,9 @@ rideSSH UseTunnel opt = do
     _ <- mapM (tryFile . (\f -> joinPath [tunDir, f])) matched
     rideSSH IgnoreTunnel opt
   where
-    hasPrefix = ((tunnelPrefix opt ++ "__") `isPrefixOf`)
+    hasPrefix = ((socketPrefix opt ++ "__") `isPrefixOf`)
     hasSuffix = (".ctl" `isSuffixOf`)
-    unfill = intercalate "__" . (++ [controlSuffix]) . take 2 . splitOn "__" . takeBaseName
+    unfill = intercalate "__" . (++ [socketSuffix]) . take 2 . splitOn "__" . takeBaseName
     tryFile f = do
       let f' = joinPath $ map ($f) [takeDirectory, unfill]
       let opt' = addRawOpts ["-S", f'] opt
